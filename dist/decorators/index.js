@@ -1,4 +1,6 @@
-import 'reflect-metadata';
+'use strict';
+
+require('reflect-metadata');
 
 /**
  * @pixielity/ts-events v1.0.0
@@ -9,6 +11,36 @@ import 'reflect-metadata';
  * @copyright 2025 Your Name <your.email@example.com>
  */
 
+
+// src/constants/metadata.constants.ts
+var EVENTS_METADATA_KEY = "tsevents:event";
+var LISTENERS_METADATA_KEY = "tsevents:listener";
+var SUBSCRIBERS_METADATA_KEY = "tsevents:subscriber";
+
+// src/decorators/event.decorator.ts
+function Event(options = {}) {
+  return (target) => {
+    Reflect.defineMetadata(
+      EVENTS_METADATA_KEY,
+      {
+        name: options.name || target.name,
+        broadcast: options.broadcast || false,
+        channels: options.channels || [],
+        target
+      },
+      target
+    );
+    if (!target.prototype.getEventName) {
+      target.prototype.getEventName = () => options.name || target.name;
+    }
+    if (!target.prototype.shouldBroadcast && options.broadcast !== void 0) {
+      target.prototype.shouldBroadcast = () => options.broadcast;
+    }
+    if (!target.prototype.broadcastOn && options.channels) {
+      target.prototype.broadcastOn = () => options.channels;
+    }
+  };
+}
 var PARAM_TYPES = "inversify:paramtypes";
 var DESIGN_PARAM_TYPES = "design:paramtypes";
 
@@ -26,9 +58,6 @@ function injectable() {
     return target;
   };
 }
-
-// src/constants/metadata.constants.ts
-var LISTENERS_METADATA_KEY = "tsevents:listener";
 
 // src/decorators/listener.decorator.ts
 function Listener(options) {
@@ -64,8 +93,23 @@ function Listener(options) {
     return target;
   };
 }
+function Subscriber() {
+  return (target) => {
+    injectable()(target);
+    Reflect.defineMetadata(
+      SUBSCRIBERS_METADATA_KEY,
+      {
+        target
+      },
+      target
+    );
+    return target;
+  };
+}
 if (typeof module !== "undefined") { module.exports = module.exports.default; }
 
-export { Listener };
-//# sourceMappingURL=listener.decorator.mjs.map
-//# sourceMappingURL=listener.decorator.mjs.map
+exports.Event = Event;
+exports.Listener = Listener;
+exports.Subscriber = Subscriber;
+//# sourceMappingURL=index.js.map
+//# sourceMappingURL=index.js.map

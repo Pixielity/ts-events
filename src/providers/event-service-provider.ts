@@ -23,7 +23,7 @@ export class EventServiceProvider extends ServiceProvider {
   public register(): void {
     // Register the event dispatcher
     if (!this.app.isBound(IEventDispatcher.$)) {
-      this.app.bind(IEventDispatcher.$).to(EventDispatcher).inSingletonScope()
+      this.app.singleton(IEventDispatcher.$, EventDispatcher)
     }
 
     // Find and register all subscribers
@@ -63,7 +63,7 @@ export class EventServiceProvider extends ServiceProvider {
 
     // Bind the subscriber to the container if not already bound
     if (!this.app.isBound(subscriberClass)) {
-      this.app.bind(subscriberClass).toSelf()
+      this.app.bind(subscriberClass)
     }
   }
 

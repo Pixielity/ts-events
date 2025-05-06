@@ -1,9 +1,6 @@
-'use strict';
-
-var rxjs = require('rxjs');
-var operators = require('rxjs/operators');
-var tsTypes = require('@pixielity/ts-types');
-require('reflect-metadata');
+import { Option, Command, BaseCommand } from '@pixielity/ts-console';
+import { IEventDispatcher, IQueueManager } from '@pixielity/ts-types';
+import 'reflect-metadata';
 
 /**
  * @pixielity/ts-events v1.0.0
@@ -14,12 +11,14 @@ require('reflect-metadata');
  * @copyright 2025 Your Name <your.email@example.com>
  */
 
+var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __decorateClass = (decorators, target, key, kind) => {
   var result = kind > 1 ? void 0 : kind ? __getOwnPropDesc(target, key) : target;
   for (var i = decorators.length - 1, decorator; i >= 0; i--)
     if (decorator = decorators[i])
-      result = (decorator(result)) || result;
+      result = (kind ? decorator(target, key, result) : decorator(result)) || result;
+  if (kind && result) __defProp(target, key, result);
   return result;
 };
 var __decorateParam = (index, decorator) => (target, key) => decorator(target, key, index);
@@ -29,11 +28,8 @@ var NAMED_TAG = "named";
 var INJECT_TAG = "inject";
 var TAGGED = "inversify:tagged";
 var TAGGED_PROP = "inversify:tagged_props";
-var PARAM_TYPES = "inversify:paramtypes";
-var DESIGN_PARAM_TYPES = "design:paramtypes";
 
 // ../../../../node_modules/inversify/es/constants/error_msgs.js
-var DUPLICATED_INJECTABLE_DECORATOR = "Cannot apply @injectable decorator multiple times.";
 var DUPLICATED_METADATA = "Metadata key was used more than once in a parameter:";
 var UNDEFINED_INJECT_ANNOTATION = function(name) {
   return "@inject called with undefined this could mean that the class " + name + " has a circular dependency problem. You can use a LazyServiceIdentifier to  overcome this limitation.";
@@ -140,18 +136,6 @@ function createTaggedDecorator(metadata) {
   };
 }
 
-// ../../../../node_modules/inversify/es/annotation/injectable.js
-function injectable() {
-  return function(target) {
-    if (Reflect.hasOwnMetadata(PARAM_TYPES, target)) {
-      throw new Error(DUPLICATED_INJECTABLE_DECORATOR);
-    }
-    var types = Reflect.getMetadata(DESIGN_PARAM_TYPES, target) || [];
-    Reflect.defineMetadata(PARAM_TYPES, types, target);
-    return target;
-  };
-}
-
 // ../../../../node_modules/inversify/es/annotation/inject_base.js
 function injectBase(metadataKey) {
   return function(serviceIdentifier) {
@@ -167,125 +151,128 @@ function injectBase(metadataKey) {
 
 // ../../../../node_modules/inversify/es/annotation/inject.js
 var inject = injectBase(INJECT_TAG);
-
-// src/constants/metadata.constants.ts
-var EVENTS_METADATA_KEY = "tsevents:event";
-
-// src/utils/reflection.util.ts
-function getEventName(event) {
-  if (typeof event === "object" && event !== null && typeof event.getEventName === "function") {
-    return event.getEventName();
-  }
-  const target = typeof event === "object" ? event.constructor : event;
-  const metadata = Reflect.getMetadata(EVENTS_METADATA_KEY, target);
-  if (metadata && metadata.name) {
-    return metadata.name;
-  }
-  return target.name;
+var eventRegistry = [];
+function getEventClasses() {
+  return [...eventRegistry];
 }
 
-// src/event-bus.ts
-exports.EventBus = class EventBus {
+// src/commands/event-command.ts
+var EventCommand = class extends BaseCommand {
   /**
-   * Creates a new EventBus instance
+   * Creates a new EventCommand instance.
    *
    * @param dispatcher - The event dispatcher
+   * @param queueManager - The queue manager
    */
-  constructor(dispatcher) {
-    /**
-     * Subject for all events
-     */
-    this.eventSubject = new rxjs.Subject();
+  constructor(dispatcher, queueManager) {
+    super();
     this.dispatcher = dispatcher;
-    this.dispatcher.getEventStream().subscribe(({ name, event }) => {
-      this.eventSubject.next({
-        name,
-        payload: event,
-        timestamp: Date.now()
-      });
-    });
+    this.queueManager = queueManager;
   }
   /**
-   * Get an observable of all events
-   *
-   * @returns An observable of all events
+   * Configure the command.
    */
-  events() {
-    return this.eventSubject.asObservable();
+  configure() {
   }
   /**
-   * Get an observable of events with a specific name
+   * Executes the command
    *
-   * @param eventName - The event name
-   * @returns An observable of events with the specified name
+   * This method must be implemented by subclasses to provide
+   * command-specific functionality.
+   *
+   * @returns {Promise<number | void>} The exit code or void
    */
-  ofType(eventName) {
-    return this.eventSubject.pipe(operators.filter((event) => event.name === eventName));
+  async execute() {
+    const subCommand = this.getArgument("command") || "list";
+    switch (subCommand) {
+      case "list":
+        return this.listEvents();
+      case "process":
+      // return this.processQueue(context.args[1])
+      case "clear":
+      // return this.clearQueue(context.args[1])
+      default:
+        this.error(`Unknown subcommand: ${subCommand}`);
+        return 1;
+    }
   }
   /**
-   * Get an observable of events of a specific class
-   *
-   * @param eventClass - The event class
-   * @returns An observable of events of the specified class
+   * List all registered events.
    */
-  ofClass(eventClass) {
-    const eventName = getEventName(eventClass);
-    return this.ofType(eventName);
+  async listEvents() {
+    const events = getEventClasses();
+    if (events.length === 0) {
+      this.info("No events registered");
+      return;
+    }
+    this.info("Registered events:");
+    for (const eventClass of events) {
+      this.line(` - ${eventClass.name}`);
+    }
   }
   /**
-   * Get an observable of event payloads with a specific name
+   * Process jobs in a queue.
    *
-   * @param eventName - The event name
-   * @returns An observable of event payloads with the specified name
+   * @param queue - The queue to process
    */
-  on(eventName) {
-    return this.ofType(eventName).pipe(operators.map((event) => event.payload));
+  async processQueue(queue) {
+    try {
+      const connection = this.queueManager.connection();
+      if (!connection.process) {
+        this.error("The current queue connection does not support processing");
+        return;
+      }
+      this.info(`Processing queue: ${queue || "default"}`);
+      await connection.process(queue);
+      this.success("Queue processed successfully");
+    } catch (error) {
+      this.error(
+        `Error processing queue: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
   }
   /**
-   * Get an observable of event payloads of a specific class
+   * Clear jobs in a queue.
    *
-   * @param eventClass - The event class
-   * @returns An observable of event payloads of the specified class
+   * @param queue - The queue to clear
    */
-  onEvent(eventClass) {
-    return this.ofClass(eventClass).pipe(operators.map((event) => event.payload));
-  }
-  /**
-   * Subscribe to an event with a listener
-   *
-   * @param event - The event name or class
-   * @param listener - The listener function or object
-   * @returns A function to unsubscribe
-   */
-  subscribe(event, listener) {
-    const eventName = typeof event === "string" ? event : getEventName(event);
-    return this.dispatcher.listen(eventName, listener);
-  }
-  /**
-   * Subscribe to an event with a typed listener
-   *
-   * @param eventClass - The event class
-   * @param listener - The listener function
-   * @returns A function to unsubscribe
-   */
-  subscribeToEvent(eventClass, listener) {
-    return this.dispatcher.listen(getEventName(eventClass), listener);
-  }
-  /**
-   * Dispatch an event through the event bus
-   *
-   * @param event - The event to dispatch
-   * @param payload - Optional payload if event is a string
-   * @returns A promise that resolves when the event has been dispatched
-   */
-  async dispatch(event, payload) {
-    return this.dispatcher.dispatch(event, payload);
+  async clearQueue(queue) {
+    try {
+      const connection = this.queueManager.connection();
+      if (!connection.clear) {
+        this.error("The current queue connection does not support clearing");
+        return;
+      }
+      this.info(`Clearing queue: ${queue || "default"}`);
+      connection.clear(queue);
+      this.success("Queue cleared successfully");
+    } catch (error) {
+      this.error(`Error clearing queue: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 };
-exports.EventBus = __decorateClass([
-  injectable(),
-  __decorateParam(0, inject(tsTypes.IEventDispatcher.$))
-], exports.EventBus);
+__decorateClass([
+  Option({
+    flags: "-c, --command",
+    description: "The sub command to call"
+  })
+], EventCommand.prototype, "command", 2);
+EventCommand = __decorateClass([
+  Command({
+    name: "event",
+    description: "Manage events and event listeners",
+    shortcuts: [
+      {
+        flag: "-e",
+        description: "Manage events and event listeners"
+      }
+    ]
+  }),
+  __decorateParam(0, inject(IEventDispatcher.$)),
+  __decorateParam(1, inject(IQueueManager.$))
+], EventCommand);
 if (typeof module !== "undefined") { module.exports = module.exports.default; }
-//# sourceMappingURL=event-bus.js.map
-//# sourceMappingURL=event-bus.js.map
+
+export { EventCommand };
+//# sourceMappingURL=index.mjs.map
+//# sourceMappingURL=index.mjs.map

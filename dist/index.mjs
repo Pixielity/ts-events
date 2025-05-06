@@ -1,8 +1,9 @@
-import { filter, map } from 'rxjs/operators';
-import { Subject } from 'rxjs';
+import { Option, Command, BaseCommand } from '@pixielity/ts-console';
+import { IEventDispatcher, IQueueManager } from '@pixielity/ts-types';
 import 'reflect-metadata';
 import { ServiceProvider } from '@pixielity/ts-application';
-import { IEventDispatcher } from '@pixielity/ts-types';
+import { filter, map } from 'rxjs/operators';
+import { Subject } from 'rxjs';
 
 /**
  * @pixielity/ts-events v1.0.0
@@ -13,17 +14,25 @@ import { IEventDispatcher } from '@pixielity/ts-types';
  * @copyright 2025 Your Name <your.email@example.com>
  */
 
+var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __decorateClass = (decorators, target, key, kind) => {
   var result = kind > 1 ? void 0 : kind ? __getOwnPropDesc(target, key) : target;
   for (var i = decorators.length - 1, decorator; i >= 0; i--)
     if (decorator = decorators[i])
-      result = (decorator(result)) || result;
+      result = (kind ? decorator(target, key, result) : decorator(result)) || result;
+  if (kind && result) __defProp(target, key, result);
   return result;
 };
 var __decorateParam = (index, decorator) => (target, key) => decorator(target, key, index);
 
-// ../../../node_modules/inversify/es/constants/metadata_keys.js
+// src/constants/metadata.constants.ts
+var EVENTS_METADATA_KEY = "tsevents:event";
+var LISTENERS_METADATA_KEY = "tsevents:listener";
+var SUBSCRIBERS_METADATA_KEY = "tsevents:subscriber";
+var QUEUEABLE_METADATA_KEY = "tsevents:queueable";
+
+// ../../../../node_modules/inversify/es/constants/metadata_keys.js
 var NAMED_TAG = "named";
 var OPTIONAL_TAG = "optional";
 var INJECT_TAG = "inject";
@@ -32,7 +41,7 @@ var TAGGED_PROP = "inversify:tagged_props";
 var PARAM_TYPES = "inversify:paramtypes";
 var DESIGN_PARAM_TYPES = "design:paramtypes";
 
-// ../../../node_modules/inversify/es/constants/error_msgs.js
+// ../../../../node_modules/inversify/es/constants/error_msgs.js
 var DUPLICATED_INJECTABLE_DECORATOR = "Cannot apply @injectable decorator multiple times.";
 var DUPLICATED_METADATA = "Metadata key was used more than once in a parameter:";
 var UNDEFINED_INJECT_ANNOTATION = function(name) {
@@ -40,7 +49,7 @@ var UNDEFINED_INJECT_ANNOTATION = function(name) {
 };
 var INVALID_DECORATOR_OPERATION = "The @inject @multiInject @tagged and @named decorators must be applied to the parameters of a class constructor or a class property.";
 
-// ../../../node_modules/inversify/es/planning/metadata.js
+// ../../../../node_modules/inversify/es/planning/metadata.js
 var Metadata = function() {
   function Metadata2(key, value) {
     this.key = key;
@@ -56,7 +65,7 @@ var Metadata = function() {
   return Metadata2;
 }();
 
-// ../../../node_modules/inversify/es/utils/js.js
+// ../../../../node_modules/inversify/es/utils/js.js
 function getFirstArrayDuplicate(array) {
   var seenValues = /* @__PURE__ */ new Set();
   for (var _i = 0, array_1 = array; _i < array_1.length; _i++) {
@@ -70,7 +79,7 @@ function getFirstArrayDuplicate(array) {
   return void 0;
 }
 
-// ../../../node_modules/inversify/es/annotation/decorator_utils.js
+// ../../../../node_modules/inversify/es/annotation/decorator_utils.js
 function targetIsConstructorFunction(target) {
   return target.prototype !== void 0;
 }
@@ -140,7 +149,7 @@ function createTaggedDecorator(metadata) {
   };
 }
 
-// ../../../node_modules/inversify/es/annotation/injectable.js
+// ../../../../node_modules/inversify/es/annotation/injectable.js
 function injectable() {
   return function(target) {
     if (Reflect.hasOwnMetadata(PARAM_TYPES, target)) {
@@ -152,7 +161,7 @@ function injectable() {
   };
 }
 
-// ../../../node_modules/inversify/es/annotation/inject_base.js
+// ../../../../node_modules/inversify/es/annotation/inject_base.js
 function injectBase(metadataKey) {
   return function(serviceIdentifier) {
     return function(target, targetKey, indexOrPropertyDescriptor) {
@@ -165,20 +174,13 @@ function injectBase(metadataKey) {
   };
 }
 
-// ../../../node_modules/inversify/es/annotation/inject.js
+// ../../../../node_modules/inversify/es/annotation/inject.js
 var inject = injectBase(INJECT_TAG);
 
-// ../../../node_modules/inversify/es/annotation/optional.js
+// ../../../../node_modules/inversify/es/annotation/optional.js
 function optional() {
   return createTaggedDecorator(new Metadata(OPTIONAL_TAG, true));
 }
-
-// src/constants/metadata.constants.ts
-var EVENTS_METADATA_KEY = "tsevents:event";
-var LISTENERS_METADATA_KEY = "tsevents:listener";
-var SUBSCRIBERS_METADATA_KEY = "tsevents:subscriber";
-
-// src/utils/reflection.util.ts
 function getEventName(event) {
   if (typeof event === "object" && event !== null && typeof event.getEventName === "function") {
     return event.getEventName();
@@ -191,6 +193,11 @@ function getEventName(event) {
   return target.name;
 }
 var eventRegistry = [];
+function registerEventClass(eventClass) {
+  if (!eventRegistry.includes(eventClass)) {
+    eventRegistry.push(eventClass);
+  }
+}
 function getEventClasses() {
   return [...eventRegistry];
 }
@@ -198,7 +205,190 @@ function isEvent(target) {
   return Reflect.hasMetadata(EVENTS_METADATA_KEY, target);
 }
 
-// src/event-dispatcher.ts
+// src/commands/event-command.ts
+var EventCommand = class extends BaseCommand {
+  /**
+   * Creates a new EventCommand instance.
+   *
+   * @param dispatcher - The event dispatcher
+   * @param queueManager - The queue manager
+   */
+  constructor(dispatcher, queueManager) {
+    super();
+    this.dispatcher = dispatcher;
+    this.queueManager = queueManager;
+  }
+  /**
+   * Configure the command.
+   */
+  configure() {
+  }
+  /**
+   * Executes the command
+   *
+   * This method must be implemented by subclasses to provide
+   * command-specific functionality.
+   *
+   * @returns {Promise<number | void>} The exit code or void
+   */
+  async execute() {
+    const subCommand = this.getArgument("command") || "list";
+    switch (subCommand) {
+      case "list":
+        return this.listEvents();
+      case "process":
+      // return this.processQueue(context.args[1])
+      case "clear":
+      // return this.clearQueue(context.args[1])
+      default:
+        this.error(`Unknown subcommand: ${subCommand}`);
+        return 1;
+    }
+  }
+  /**
+   * List all registered events.
+   */
+  async listEvents() {
+    const events = getEventClasses();
+    if (events.length === 0) {
+      this.info("No events registered");
+      return;
+    }
+    this.info("Registered events:");
+    for (const eventClass of events) {
+      this.line(` - ${eventClass.name}`);
+    }
+  }
+  /**
+   * Process jobs in a queue.
+   *
+   * @param queue - The queue to process
+   */
+  async processQueue(queue) {
+    try {
+      const connection = this.queueManager.connection();
+      if (!connection.process) {
+        this.error("The current queue connection does not support processing");
+        return;
+      }
+      this.info(`Processing queue: ${queue || "default"}`);
+      await connection.process(queue);
+      this.success("Queue processed successfully");
+    } catch (error) {
+      this.error(
+        `Error processing queue: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
+  /**
+   * Clear jobs in a queue.
+   *
+   * @param queue - The queue to clear
+   */
+  async clearQueue(queue) {
+    try {
+      const connection = this.queueManager.connection();
+      if (!connection.clear) {
+        this.error("The current queue connection does not support clearing");
+        return;
+      }
+      this.info(`Clearing queue: ${queue || "default"}`);
+      connection.clear(queue);
+      this.success("Queue cleared successfully");
+    } catch (error) {
+      this.error(`Error clearing queue: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+};
+__decorateClass([
+  Option({
+    flags: "-c, --command",
+    description: "The sub command to call"
+  })
+], EventCommand.prototype, "command", 2);
+EventCommand = __decorateClass([
+  Command({
+    name: "event",
+    description: "Manage events and event listeners",
+    shortcuts: [
+      {
+        flag: "-e",
+        description: "Manage events and event listeners"
+      }
+    ]
+  }),
+  __decorateParam(0, inject(IEventDispatcher.$)),
+  __decorateParam(1, inject(IQueueManager.$))
+], EventCommand);
+function Event(options = {}) {
+  return (target) => {
+    Reflect.defineMetadata(
+      EVENTS_METADATA_KEY,
+      {
+        name: options.name || target.name,
+        broadcast: options.broadcast || false,
+        channels: options.channels || [],
+        target
+      },
+      target
+    );
+    if (!target.prototype.getEventName) {
+      target.prototype.getEventName = () => options.name || target.name;
+    }
+    if (!target.prototype.shouldBroadcast && options.broadcast !== void 0) {
+      target.prototype.shouldBroadcast = () => options.broadcast;
+    }
+    if (!target.prototype.broadcastOn && options.channels) {
+      target.prototype.broadcastOn = () => options.channels;
+    }
+  };
+}
+function Listener(options) {
+  return (target) => {
+    injectable()(target);
+    const events = Array.isArray(options.event) ? options.event : [options.event];
+    Reflect.defineMetadata(
+      LISTENERS_METADATA_KEY,
+      {
+        events,
+        queued: options.queued || false,
+        delay: options.delay || 0,
+        connection: options.connection || null,
+        queue: options.queue || null,
+        target
+      },
+      target
+    );
+    if (options.queued) {
+      if (!target.prototype.shouldQueue) {
+        target.prototype.shouldQueue = () => true;
+      }
+      if (!target.prototype.connection) {
+        target.prototype.connection = () => options.connection || null;
+      }
+      if (!target.prototype.queue) {
+        target.prototype.queue = () => options.queue || null;
+      }
+      if (!target.prototype.delay) {
+        target.prototype.delay = () => options.delay || 0;
+      }
+    }
+    return target;
+  };
+}
+function Subscriber() {
+  return (target) => {
+    injectable()(target);
+    Reflect.defineMetadata(
+      SUBSCRIBERS_METADATA_KEY,
+      {
+        target
+      },
+      target
+    );
+    return target;
+  };
+}
 var QUEUE_MANAGER_TOKEN = Symbol.for("QueueManager");
 var EventDispatcher = class {
   /**
@@ -482,75 +672,8 @@ EventDispatcher = __decorateClass([
   __decorateParam(0, inject(QUEUE_MANAGER_TOKEN)),
   __decorateParam(0, optional())
 ], EventDispatcher);
-function Event(options = {}) {
-  return (target) => {
-    Reflect.defineMetadata(
-      EVENTS_METADATA_KEY,
-      {
-        name: options.name || target.name,
-        broadcast: options.broadcast || false,
-        channels: options.channels || [],
-        target
-      },
-      target
-    );
-    if (!target.prototype.getEventName) {
-      target.prototype.getEventName = () => options.name || target.name;
-    }
-    if (!target.prototype.shouldBroadcast && options.broadcast !== void 0) {
-      target.prototype.shouldBroadcast = () => options.broadcast;
-    }
-    if (!target.prototype.broadcastOn && options.channels) {
-      target.prototype.broadcastOn = () => options.channels;
-    }
-  };
-}
-function Listener(options) {
-  return (target) => {
-    injectable()(target);
-    const events = Array.isArray(options.event) ? options.event : [options.event];
-    Reflect.defineMetadata(
-      LISTENERS_METADATA_KEY,
-      {
-        events,
-        queued: options.queued || false,
-        delay: options.delay || 0,
-        connection: options.connection || null,
-        queue: options.queue || null,
-        target
-      },
-      target
-    );
-    if (options.queued) {
-      if (!target.prototype.shouldQueue) {
-        target.prototype.shouldQueue = () => true;
-      }
-      if (!target.prototype.connection) {
-        target.prototype.connection = () => options.connection || null;
-      }
-      if (!target.prototype.queue) {
-        target.prototype.queue = () => options.queue || null;
-      }
-      if (!target.prototype.delay) {
-        target.prototype.delay = () => options.delay || 0;
-      }
-    }
-    return target;
-  };
-}
-function Subscriber() {
-  return (target) => {
-    injectable()(target);
-    Reflect.defineMetadata(
-      SUBSCRIBERS_METADATA_KEY,
-      {
-        target
-      },
-      target
-    );
-    return target;
-  };
-}
+
+// src/providers/event-service-provider.ts
 var EventServiceProvider = class extends ServiceProvider {
   constructor() {
     super(...arguments);
@@ -565,7 +688,7 @@ var EventServiceProvider = class extends ServiceProvider {
    */
   register() {
     if (!this.app.isBound(IEventDispatcher.$)) {
-      this.app.bind(IEventDispatcher.$).to(EventDispatcher).inSingletonScope();
+      this.app.singleton(IEventDispatcher.$, EventDispatcher);
     }
     this.registerSubscribers();
   }
@@ -595,7 +718,7 @@ var EventServiceProvider = class extends ServiceProvider {
     }
     this.subscribers.push(subscriberClass);
     if (!this.app.isBound(subscriberClass)) {
-      this.app.bind(subscriberClass).toSelf();
+      this.app.bind(subscriberClass);
     }
   }
   /**
@@ -624,6 +747,6 @@ EventServiceProvider = __decorateClass([
 ], EventServiceProvider);
 if (typeof module !== "undefined") { module.exports = module.exports.default; }
 
-export { Event as EventDecorator, EventDispatcher, EventServiceProvider, Listener as ListenerDecorator, QUEUE_MANAGER_TOKEN, Subscriber as SubscriberDecorator, getEventClasses, getEventName, isEvent };
+export { EVENTS_METADATA_KEY, Event, EventCommand, EventDispatcher, EventServiceProvider, LISTENERS_METADATA_KEY, Listener, QUEUEABLE_METADATA_KEY, QUEUE_MANAGER_TOKEN, SUBSCRIBERS_METADATA_KEY, Subscriber, getEventClasses, getEventName, isEvent, registerEventClass };
 //# sourceMappingURL=index.mjs.map
 //# sourceMappingURL=index.mjs.map

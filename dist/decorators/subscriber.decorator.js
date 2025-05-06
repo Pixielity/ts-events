@@ -14,10 +14,10 @@ require('reflect-metadata');
 var PARAM_TYPES = "inversify:paramtypes";
 var DESIGN_PARAM_TYPES = "design:paramtypes";
 
-// ../../../node_modules/inversify/es/constants/error_msgs.js
+// ../../../../node_modules/inversify/es/constants/error_msgs.js
 var DUPLICATED_INJECTABLE_DECORATOR = "Cannot apply @injectable decorator multiple times.";
 
-// ../../../node_modules/inversify/es/annotation/injectable.js
+// ../../../../node_modules/inversify/es/annotation/injectable.js
 function injectable() {
   return function(target) {
     if (Reflect.hasOwnMetadata(PARAM_TYPES, target)) {
