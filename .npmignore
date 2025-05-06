@@ -1,0 +1,28 @@
+# Source files
+**/*.ts
+!**/*.d.ts
+
+# Configuration files
+tsconfig.json
+tsup.config.ts
+jest.config.ts
+jest.setup.ts
+.eslintrc.json
+.prettierrc
+.commitlintrc.json
+typedoc.json
+.husky
+.github
+.changeset
+
+# Test files
+__tests__
+coverage
+
+# Development files
+docs
+node_modules
+.vscode
+.idea
+.DS_Store
+*.log
