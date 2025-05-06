@@ -1,5 +1,5 @@
-import "reflect-metadata"
-import { EVENTS_METADATA_KEY } from "../constants/metadata.constants"
+import 'reflect-metadata'
+import { EVENTS_METADATA_KEY } from '../constants/metadata.constants'
 
 /**
  * Options for the Event decorator.
@@ -28,21 +28,21 @@ export interface EventOptions {
  * @returns {ClassDecorator} The decorator function
  *
  * @example
- * ```typescript
+ * \`\`\`typescript
  * @Event()
- * class UserCreated implements Event {
+ * class UserCreated implements IEvent {
  *   constructor(public readonly userId: string) {}
  * }
  *
  * // With options
  * @Event({ name: 'user.created', broadcast: true, channels: ['users'] })
- * class UserCreated implements Event {
+ * class UserCreated implements IEvent {
  *   constructor(public readonly userId: string) {}
  * }
- * ```
+ * \`\`\`
  */
 export function Event(options: EventOptions = {}): ClassDecorator {
-  return (target: Function) => {
+  return (target: Function): void => {
     // Store event metadata
     Reflect.defineMetadata(
       EVENTS_METADATA_KEY,
@@ -67,7 +67,5 @@ export function Event(options: EventOptions = {}): ClassDecorator {
     if (!target.prototype.broadcastOn && options.channels) {
       target.prototype.broadcastOn = () => options.channels
     }
-
-    return target
   }
 }

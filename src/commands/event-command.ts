@@ -1,15 +1,32 @@
-import { injectable, inject } from "inversify"
-import { BaseCommand } from "./base-command"
-import { EventDispatcher } from "../core/event-dispatcher"
-import { QueueManager } from "../core/queue-manager"
-import type { MemoryQueueConnection } from "../connections/memory-queue-connection"
-import { getEventClasses } from "../utils/reflection.utils"
+import { injectable, inject } from 'inversify'
+import { BaseCommand, Command, Option } from '@pixielity/ts-console'
+import { IEventDispatcher, IQueueConnection, IQueueManager } from '@pixielity/ts-types'
+
+import { getEventClasses } from '../utils/reflection.util'
 
 /**
  * Command for managing events and queues.
  */
-@injectable()
+@Command({
+  name: 'event',
+  description: 'Manage events and event listeners',
+  shortcuts: [
+    {
+      flag: '-e',
+      description: 'Manage events and event listeners',
+    },
+  ],
+})
 export class EventCommand extends BaseCommand {
+  /**
+   * The uppercase option
+   */
+  @Option({
+    flags: '-c, --command',
+    description: 'The sub command to call',
+  })
+  private command!: boolean
+
   /**
    * Creates a new EventCommand instance.
    *
@@ -17,10 +34,10 @@ export class EventCommand extends BaseCommand {
    * @param queueManager - The queue manager
    */
   constructor(
-    @inject(EventDispatcher.$) private dispatcher: EventDispatcher,
-    @inject(QueueManager.$) private queueManager: QueueManager
+    @inject(IEventDispatcher.$) private dispatcher: IEventDispatcher,
+    @inject(IQueueManager.$) private queueManager: IQueueManager,
   ) {
-    super("event", "Manage events and event listeners")
+    super()
   }
 
   /**
@@ -32,20 +49,23 @@ export class EventCommand extends BaseCommand {
   }
 
   /**
-   * Execute the command.
+   * Executes the command
    *
-   * @param context - The command context
+   * This method must be implemented by subclasses to provide
+   * command-specific functionality.
+   *
+   * @returns {Promise<number | void>} The exit code or void
    */
-  public async execute(context: any): Promise<number | void> {
-    const subCommand = context.args[0] || "list"
+  public async execute(): Promise<number | void> {
+    const subCommand = this.getArgument('command') || 'list'
 
     switch (subCommand) {
-      case "list":
+      case 'list':
         return this.listEvents()
-      case "process":
-        return this.processQueue(context.args[1])
-      case "clear":
-        return this.clearQueue(context.args[1])
+      case 'process':
+      // return this.processQueue(context.args[1])
+      case 'clear':
+      // return this.clearQueue(context.args[1])
       default:
         this.error(`Unknown subcommand: ${subCommand}`)
         return 1
@@ -59,11 +79,11 @@ export class EventCommand extends BaseCommand {
     const events = getEventClasses()
 
     if (events.length === 0) {
-      this.info("No events registered")
+      this.info('No events registered')
       return
     }
 
-    this.info("Registered events:")
+    this.info('Registered events:')
 
     for (const eventClass of events) {
       this.line(` - ${eventClass.name}`)
@@ -77,18 +97,20 @@ export class EventCommand extends BaseCommand {
    */
   private async processQueue(queue?: string): Promise<void> {
     try {
-      const connection = this.queueManager.connection() as MemoryQueueConnection
+      const connection = this.queueManager.connection() as IQueueConnection
 
       if (!connection.process) {
-        this.error("The current queue connection does not support processing")
+        this.error('The current queue connection does not support processing')
         return
       }
 
-      this.info(`Processing queue: ${queue || "default"}`)
+      this.info(`Processing queue: ${queue || 'default'}`)
       await connection.process(queue)
-      this.success("Queue processed successfully")
+      this.success('Queue processed successfully')
     } catch (error) {
-      this.error(`Error processing queue: ${error instanceof Error ? error.message : String(error)}`)
+      this.error(
+        `Error processing queue: ${error instanceof Error ? error.message : String(error)}`,
+      )
     }
   }
 
@@ -99,16 +121,16 @@ export class EventCommand extends BaseCommand {
    */
   private async clearQueue(queue?: string): Promise<void> {
     try {
-      const connection = this.queueManager.connection() as MemoryQueueConnection
+      const connection = this.queueManager.connection() as IQueueConnection
 
       if (!connection.clear) {
-        this.error("The current queue connection does not support clearing")
+        this.error('The current queue connection does not support clearing')
         return
       }
 
-      this.info(`Clearing queue: ${queue || "default"}`)
+      this.info(`Clearing queue: ${queue || 'default'}`)
       connection.clear(queue)
-      this.success("Queue cleared successfully")
+      this.success('Queue cleared successfully')
     } catch (error) {
       this.error(`Error clearing queue: ${error instanceof Error ? error.message : String(error)}`)
     }

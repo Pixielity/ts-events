@@ -1,11 +1,9 @@
-import { injectable } from "inversify"
-import { ServiceProvider } from "./service-provider"
-import { EventDispatcher, QUEUE_MANAGER_TOKEN } from "../core/event-dispatcher"
-import type { Subscriber } from "../interfaces/subscriber.interface"
-import { SUBSCRIBERS_METADATA_KEY } from "../constants/metadata.constants"
+import { injectable } from 'inversify'
+import { ServiceProvider } from '@pixielity/ts-application'
+import { type ISubscriber, IEventDispatcher, IQueueManager } from '@pixielity/ts-types'
 
-// Import from the queue package
-import { QueueManager } from "tsqueue"
+import { EventDispatcher, QUEUE_MANAGER_TOKEN } from '../event-dispatcher'
+import { SUBSCRIBERS_METADATA_KEY } from '../constants/metadata.constants'
 
 /**
  * Service provider for the event system.
@@ -16,7 +14,7 @@ export class EventServiceProvider extends ServiceProvider {
   /**
    * Array of subscriber classes to register.
    */
-  private subscribers: (new () => Subscriber)[] = []
+  private subscribers: (new () => ISubscriber)[] = []
 
   /**
    * Register any application services.
@@ -24,13 +22,8 @@ export class EventServiceProvider extends ServiceProvider {
    */
   public register(): void {
     // Register the event dispatcher
-    if (!this.app.isBound(EventDispatcher.$)) {
-      this.app.bind(EventDispatcher.$).to(EventDispatcher).inSingletonScope()
-    }
-
-    // Bind the queue manager token to the queue manager if it exists
-    if (this.app.isBound(QueueManager.$) && !this.app.isBound(QUEUE_MANAGER_TOKEN)) {
-      this.app.bind(QUEUE_MANAGER_TOKEN).toService(QueueManager.$)
+    if (!this.app.isBound(IEventDispatcher.$)) {
+      this.app.bind(IEventDispatcher.$).to(EventDispatcher).inSingletonScope()
     }
 
     // Find and register all subscribers
@@ -42,12 +35,12 @@ export class EventServiceProvider extends ServiceProvider {
    * This method is called after all service providers have been registered.
    */
   public boot(): void {
-    const dispatcher = this.app.get<EventDispatcher>(EventDispatcher.$)
+    const dispatcher = this.app.make<IEventDispatcher>(IEventDispatcher.$)
 
     // Initialize all subscribers
     for (const SubscriberClass of this.subscribers) {
       try {
-        const subscriber = this.app.resolve<Subscriber>(SubscriberClass)
+        const subscriber = this.app.resolve<ISubscriber>(SubscriberClass)
         dispatcher.subscribe(subscriber)
       } catch (error) {
         console.error(`Error initializing subscriber ${SubscriberClass.name}:`, error)
@@ -60,7 +53,7 @@ export class EventServiceProvider extends ServiceProvider {
    *
    * @param {new () => Subscriber} subscriberClass - The subscriber class to register
    */
-  public registerSubscriber(subscriberClass: new () => Subscriber): void {
+  public registerSubscriber(subscriberClass: new () => ISubscriber): void {
     // Ensure the class has the subscriber metadata
     if (!Reflect.hasMetadata(SUBSCRIBERS_METADATA_KEY, subscriberClass)) {
       throw new Error(`Class ${subscriberClass.name} is not a valid subscriber`)
@@ -79,7 +72,7 @@ export class EventServiceProvider extends ServiceProvider {
    *
    * @param {Array<new () => Subscriber>} subscriberClasses - The subscriber classes to register
    */
-  public registerSubscribers(subscriberClasses?: Array<new () => Subscriber>): void {
+  public registerSubscribers(subscriberClasses?: Array<new () => ISubscriber>): void {
     if (subscriberClasses) {
       for (const subscriberClass of subscriberClasses) {
         this.registerSubscriber(subscriberClass)
@@ -92,7 +85,7 @@ export class EventServiceProvider extends ServiceProvider {
    *
    * @returns {EventDispatcher} The event dispatcher
    */
-  public getDispatcher(): EventDispatcher {
-    return this.app.get<EventDispatcher>(EventDispatcher.$)
+  public getDispatcher(): IEventDispatcher {
+    return this.app.make<IEventDispatcher>(IEventDispatcher.$)
   }
 }

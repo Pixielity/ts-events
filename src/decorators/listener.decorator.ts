@@ -1,16 +1,16 @@
-import "reflect-metadata"
-import { injectable } from "inversify"
-import { LISTENERS_METADATA_KEY } from "../constants/metadata.constants"
-import type { Event } from "../interfaces/event.interface"
+import 'reflect-metadata'
+import { injectable } from 'inversify'
+import { LISTENERS_METADATA_KEY } from '../constants/metadata.constants'
+import type { IEvent } from '@pixielity/ts-types'
 
 /**
  * Options for the Listener decorator.
  */
 export interface ListenerOptions {
   /**
-   * The event(s) to listen for. Can be a string event name or an Event class.
+   * The event(s) to listen for. Can be a string event name or an IEvent class.
    */
-  event: string | (new (...args: any[]) => Event) | (string | (new (...args: any[]) => Event))[]
+  event: string | (new (...args: any[]) => IEvent) | (string | (new (...args: any[]) => IEvent))[]
 
   /**
    * Whether the listener should be queued.
@@ -40,9 +40,9 @@ export interface ListenerOptions {
  * @returns {ClassDecorator} The decorator function
  *
  * @example
- * ```typescript
+ * \`\`\`typescript
  * @Listener({ event: UserCreated })
- * class SendWelcomeEmail implements Listener<UserCreated> {
+ * class SendWelcomeEmail implements IListener<UserCreated> {
  *   handle(event: UserCreated): void {
  *     // Send welcome email logic
  *   }
@@ -50,17 +50,17 @@ export interface ListenerOptions {
  *
  * // With multiple events
  * @Listener({ event: [UserCreated, UserActivated], queued: true, delay: 60 })
- * class NotifyAdminOfUserActivity implements Listener {
- *   handle(event: Event): void {
+ * class NotifyAdminOfUserActivity implements IListener {
+ *   handle(event: IEvent): void {
  *     // Notify admin logic
  *   }
  * }
- * ```
+ * \`\`\`
  */
 export function Listener(options: ListenerOptions): ClassDecorator {
-  return (target: Function) => {
+  return (target: Function): any => {
     // Apply injectable decorator
-    injectable()(target)
+    injectable()(target as any)
 
     const events = Array.isArray(options.event) ? options.event : [options.event]
 

@@ -15,9 +15,26 @@
     "isolatedModules": true,
     "baseUrl": "./",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": [
+        "src/*"
+      ],
+      "@pixielity/ts-application": [
+        "../ts-application"
+      ],
+      "@pixielity/ts-types": [
+        "../ts-types"
+      ],
+      "@pixielity/ts-types/*": [
+        "../ts-types/dist/*"
+      ]
     }
   },
-  "include": ["**/*.ts"],
-  "exclude": ["node_modules", "dist", "coverage"]
+  "include": [
+    "**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "coverage"
+  ]
 }

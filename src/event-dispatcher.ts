@@ -1,15 +1,15 @@
-import { injectable, inject, optional } from "inversify"
-import { Subject, type Observable } from "rxjs"
-import { filter, map } from "rxjs/operators"
-import type { EventDispatcher as IEventDispatcher } from "../interfaces/dispatcher.interface"
-import type { Event } from "../interfaces/event.interface"
-import type { Listener } from "../interfaces/listener.interface"
-import type { Subscriber } from "../interfaces/subscriber.interface"
-import { getEventName } from "../utils/reflection.utils"
+import type {
+  IEventDispatcher,
+  IEvent,
+  IListener,
+  ISubscriber,
+  IQueueManager,
+} from '@pixielity/ts-types'
+import { filter, map } from 'rxjs/operators'
+import { Subject, type Observable } from 'rxjs'
+import { injectable, inject, optional } from 'inversify'
 
-// Import from the queue package
-import type { QueueManager } from "tsqueue"
-import { ShouldQueue } from "tsqueue"
+import { getEventName } from './utils/reflection.util'
 
 /**
  * Event data structure for the event stream
@@ -34,7 +34,7 @@ export interface EventData<T = any> {
 /**
  * Symbol for the queue manager dependency injection token
  */
-export const QUEUE_MANAGER_TOKEN = Symbol.for("QueueManager")
+export const QUEUE_MANAGER_TOKEN = Symbol.for('QueueManager')
 
 /**
  * The main event dispatcher implementation.
@@ -46,7 +46,7 @@ export class EventDispatcher implements IEventDispatcher {
   /**
    * Map of event names to listeners.
    */
-  private listeners: Map<string, Array<Listener | Function>> = new Map()
+  private listeners: Map<string, Array<IListener | Function>> = new Map()
 
   /**
    * Subject for broadcasting events
@@ -54,19 +54,33 @@ export class EventDispatcher implements IEventDispatcher {
   private eventSubject = new Subject<EventData>()
 
   /**
+   * Subject for broadcasting events with name and payload
+   */
+  private eventStreamSubject = new Subject<{ name: string; event: any }>()
+
+  /**
    * Queue manager instance.
    */
-  private queueManager?: QueueManager
+  private queueManager?: IQueueManager
 
   /**
    * Creates a new EventDispatcher instance.
    *
    * @param {QueueManager} [queueManager] - Optional queue manager for queueable events
    */
-  constructor(
-    @inject(QUEUE_MANAGER_TOKEN) @optional() queueManager?: QueueManager,
-  ) {
+  constructor(@inject(QUEUE_MANAGER_TOKEN) @optional() queueManager?: IQueueManager) {
     this.queueManager = queueManager
+  }
+
+  /**
+   * [listenerCount description]
+   *
+   * @param   {string}  eventName  [eventName description]
+   *
+   * @return  {number}             [return description]
+   */
+  public listenerCount(eventName: string): number {
+    return this.listeners.get(eventName)?.length ?? 0
   }
 
   /**
@@ -76,7 +90,7 @@ export class EventDispatcher implements IEventDispatcher {
    * @param {Listener | Function} listener - The listener function or object
    * @returns {() => void} A function to remove the listener
    */
-  public listen(event: string, listener: Listener | Function): () => void {
+  public listen(event: string, listener: IListener | Function): () => void {
     if (!this.listeners.has(event)) {
       this.listeners.set(event, [])
     }
@@ -111,8 +125,8 @@ export class EventDispatcher implements IEventDispatcher {
    *
    * @param {Subscriber} subscriber - The subscriber to register
    */
-  public subscribe(subscriber: Subscriber): void {
-    subscriber.subscribe(this)
+  public subscribe(subscriber: ISubscriber): void {
+    subscriber.subscribe(this as IEventDispatcher)
   }
 
   /**
@@ -122,15 +136,21 @@ export class EventDispatcher implements IEventDispatcher {
    * @param {any} [payload] - The event payload (if event is a string)
    * @returns {Promise<any[]>} Array of results from the listeners
    */
-  public async dispatch(event: string | Event, payload?: any): Promise<any[]> {
-    const eventName = typeof event === "string" ? event : getEventName(event)
-    const eventObject = typeof event === "string" ? payload : event
+  public async dispatch(event: string | IEvent, payload?: any): Promise<any[]> {
+    const eventName = typeof event === 'string' ? event : getEventName(event)
+    const eventObject = typeof event === 'string' ? payload : event
 
     // Emit to the event stream
     this.eventSubject.next({
       name: eventName,
       payload: eventObject,
       timestamp: Date.now(),
+    })
+
+    // Emit to the event stream with name and event
+    this.eventStreamSubject.next({
+      name: eventName,
+      event: eventObject,
     })
 
     // Check if the event is queueable and we have a queue manager
@@ -149,7 +169,7 @@ export class EventDispatcher implements IEventDispatcher {
       try {
         let result: any
 
-        if (typeof listener === "function") {
+        if (typeof listener === 'function') {
           result = await listener(eventObject)
         } else {
           // Check if the listener is queueable and we have a queue manager
@@ -178,15 +198,21 @@ export class EventDispatcher implements IEventDispatcher {
    * @param {any} [payload] - The event payload (if event is a string)
    * @returns {Promise<any>} The first non-null response or null
    */
-  public async until(event: string | Event, payload?: any): Promise<any> {
-    const eventName = typeof event === "string" ? event : getEventName(event)
-    const eventObject = typeof event === "string" ? payload : event
+  public async until(event: string | IEvent, payload?: any): Promise<any> {
+    const eventName = typeof event === 'string' ? event : getEventName(event)
+    const eventObject = typeof event === 'string' ? payload : event
 
     // Emit to the event stream
     this.eventSubject.next({
       name: eventName,
       payload: eventObject,
       timestamp: Date.now(),
+    })
+
+    // Emit to the event stream with name and event
+    this.eventStreamSubject.next({
+      name: eventName,
+      event: eventObject,
     })
 
     // Get listeners for this event
@@ -196,7 +222,7 @@ export class EventDispatcher implements IEventDispatcher {
       try {
         let result: any
 
-        if (typeof listener === "function") {
+        if (typeof listener === 'function') {
           result = await listener(eventObject)
         } else {
           // We don't queue listeners in until() since we need the result
@@ -241,6 +267,15 @@ export class EventDispatcher implements IEventDispatcher {
   }
 
   /**
+   * Get an observable of all events with their names
+   *
+   * @returns An observable of events with their names
+   */
+  public getEventStream(): Observable<{ name: string; event: any }> {
+    return this.eventStreamSubject.asObservable()
+  }
+
+  /**
    * Get an observable of events with a specific name
    *
    * @param eventName - The event name
@@ -256,7 +291,9 @@ export class EventDispatcher implements IEventDispatcher {
    * @param eventClass - The event class
    * @returns An observable of events of the specified class
    */
-  public ofClass<T extends Event>(eventClass: new (...args: any[]) => T): Observable<EventData<T>> {
+  public ofClass<T extends IEvent>(
+    eventClass: new (...args: any[]) => T,
+  ): Observable<EventData<T>> {
     const eventName = getEventName(eventClass)
     return this.ofType(eventName) as Observable<EventData<T>>
   }
@@ -277,7 +314,7 @@ export class EventDispatcher implements IEventDispatcher {
    * @param eventClass - The event class
    * @returns An observable of event payloads of the specified class
    */
-  public onEvent<T extends Event>(eventClass: new (...args: any[]) => T): Observable<T> {
+  public onEvent<T extends IEvent>(eventClass: new (...args: any[]) => T): Observable<T> {
     return this.ofClass(eventClass).pipe(map((event) => event.payload as T))
   }
 
@@ -292,7 +329,7 @@ export class EventDispatcher implements IEventDispatcher {
     if (!obj) return false
 
     // Check if the object implements ShouldQueue interface
-    return obj instanceof ShouldQueue || typeof obj.shouldQueue === "function"
+    return typeof obj.shouldQueue === 'function'
   }
 
   /**
@@ -304,7 +341,7 @@ export class EventDispatcher implements IEventDispatcher {
    */
   private async queueEvent(event: any): Promise<void> {
     if (!this.queueManager) {
-      throw new Error("Queue manager is not configured")
+      throw new Error('Queue manager is not configured')
     }
 
     const delay = event.delay?.() || 0
@@ -326,9 +363,9 @@ export class EventDispatcher implements IEventDispatcher {
    * @returns Promise resolving when the listener is queued
    * @private
    */
-  private async queueListener(listener: any, event: Event): Promise<void> {
+  private async queueListener(listener: any, event: IEvent): Promise<void> {
     if (!this.queueManager) {
-      throw new Error("Queue manager is not configured")
+      throw new Error('Queue manager is not configured')
     }
 
     const delay = listener.delay?.() || 0

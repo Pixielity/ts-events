@@ -1,6 +1,7 @@
-import "reflect-metadata"
-import type { Event } from "../interfaces/event.interface"
-import { EVENTS_METADATA_KEY } from "../constants/metadata.constants"
+import 'reflect-metadata'
+import type { IEvent } from '@pixielity/ts-types'
+
+import { EVENTS_METADATA_KEY } from '../constants/metadata.constants'
 
 /**
  * Get the event name from an event object or class.
@@ -8,14 +9,18 @@ import { EVENTS_METADATA_KEY } from "../constants/metadata.constants"
  * @param {Event | Function} event - The event object or class
  * @returns {string} The event name
  */
-export function getEventName(event: Event | Function): string {
+export function getEventName(event: IEvent | Function): string {
   // If it's an instance with getEventName method, use that
-  if (typeof event === "object" && event !== null && typeof (event as Event).getEventName === "function") {
-    return (event as Event).getEventName!()
+  if (
+    typeof event === 'object' &&
+    event !== null &&
+    typeof (event as IEvent).getEventName === 'function'
+  ) {
+    return (event as IEvent).getEventName!()
   }
 
   // Get the constructor (if it's an instance) or the class itself
-  const target = typeof event === "object" ? event.constructor : event
+  const target = typeof event === 'object' ? event.constructor : event
 
   // Check for metadata
   const metadata = Reflect.getMetadata(EVENTS_METADATA_KEY, target)

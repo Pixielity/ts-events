@@ -1,7 +1,3 @@
-import 'reflect-metadata'
-import { injectable } from 'inversify'
-import { SUBSCRIBERS_METADATA_KEY } from '../constants/metadata.constants'
-
 /**
  * Decorator that marks a class as an event subscriber.
  *
@@ -26,20 +22,6 @@ import { SUBSCRIBERS_METADATA_KEY } from '../constants/metadata.constants'
  * }
  * \`\`\`
  */
-export function Subscriber(): ClassDecorator {
-  return (target: Function): any => {
-    // Apply injectable decorator
-    injectable()(target as any)
+declare function Subscriber(): ClassDecorator;
 
-    // Store subscriber metadata
-    Reflect.defineMetadata(
-      SUBSCRIBERS_METADATA_KEY,
-      {
-        target,
-      },
-      target,
-    )
-
-    return target
-  }
-}
+export { Subscriber };
